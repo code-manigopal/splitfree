@@ -122,14 +122,11 @@ async function loadMyTrips(){
   s2.forEach(d=>{if(!seen.has(d.id)){seen.add(d.id);myTrips.push({id:d.id,...d.data()});}});
 }
 
-// Rendering lock — only one renderHome runs at a time, queued calls are dropped
-let _homeRenderToken=0;
+let _homeRendering=false;
 async function renderHome(){
-  const token=++_homeRenderToken;
-  // Small delay so rapid consecutive calls collapse into one
-  await new Promise(r=>setTimeout(r,50));
-  if(token!==_homeRenderToken)return; // a newer call superseded this one
-  await _renderHome();
+  if(_homeRendering)return;
+  _homeRendering=true;
+  try{ await _renderHome(); } finally{ _homeRendering=false; }
 }
 
 async function _renderHome(){
@@ -171,7 +168,7 @@ async function _renderHome(){
   }
 }
 
-} // end _renderHome
+}
 
 function tripCard(t){
   const adm=t.createdBy===user.email;
