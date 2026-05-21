@@ -655,10 +655,54 @@ function rRow(e){
 // ── SETTLE ──
 function rSettle(){
   const txns=calcSettlements();
-  if(!txns.length)return`<div class="sc"><div class="empty"><div class="empty-icon">🎉</div><p>All settled!</p></div></div>`;
-  const pend=txns.filter(t=>!isDone(t.from,t.to));
-  const done=txns.filter(t=>isDone(t.from,t.to));
-  return`<div class="sc"><div class="sc-title">Pending Transfers <span class="sc-sub">${pend.length} remaining</span></div>${pend.map(t=>`<div class="settle-row"><span class="settle-from">${t.from}</span><span class="settle-arrow"> → </span><span class="settle-to">${t.to}</span><span class="settle-amt">${fmt(t.amount)}</span><button class="btn btn-green btn-sm" data-settle-from="${t.from}" data-settle-to="${t.to}">✓ Mark Done</button></div>`).join("")}${done.length?`<div class="divider"></div><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Completed</div>${done.map(t=>{const sid=getSettlementId(t.from,t.to);return`<div class="settle-row"><span class="settle-from">${t.from}</span><span class="settle-arrow"> → </span><span class="settle-to">${t.to}</span><span class="settle-amt">${fmt(t.amount)}</span><span class="badge-done">✓ Done</span>${sid&&(getSettlementMarkedBy(t.from,t.to)===myName()||isAdmin())?`<button class="btn btn-ghost btn-sm" data-undo-settle="${sid}">↩ Undo</button>`:""}</div>`;}).join("")}`:""}</div><div class="sc"><div class="sc-title">Breakdown by Activity</div>${activities.map(act=>{const ex=expenses.filter(e=>e.activity===act.name);if(!ex.length)return"";return`<div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">${act.icon||"💰"} ${act.name} — ${fmt(ex.reduce((s,e)=>s+e.amount,0))}</div>${ex.map(e=>`<div style="font-size:12px;color:var(--text2);margin-left:14px;margin-bottom:2px;font-family:'DM Mono',monospace">• ${e.description}: ${fmt(e.amount)} (${e.paidBy})</div>`).join("")}</div>`;}).join("")}</div>`;
+  if(!txns.length)return`<div class="sc"><div class="empty"><div class="empty-icon">🎉</div><p>All settled! No transfers needed.</p></div></div>`;
+  const mn=myName();
+  // Split into mine and others
+  const myPend=txns.filter(t=>!isDone(t.from,t.to)&&(t.from===mn||t.to===mn));
+  const otherPend=txns.filter(t=>!isDone(t.from,t.to)&&t.from!==mn&&t.to!==mn);
+  const myDone=txns.filter(t=>isDone(t.from,t.to)&&(t.from===mn||t.to===mn));
+  const otherDone=txns.filter(t=>isDone(t.from,t.to)&&t.from!==mn&&t.to!==mn);
+
+  const renderPendRow=(t,showBtn)=>`<div class="settle-row">
+    <span class="settle-from">${t.from}</span><span class="settle-arrow"> → </span><span class="settle-to">${t.to}</span>
+    <span class="settle-amt">${fmt(t.amount)}</span>
+    ${showBtn?`<button class="btn btn-green btn-sm" data-settle-from="${t.from}" data-settle-to="${t.to}">✓ Mark Done</button>`:""}
+  </div>`;
+
+  const renderDoneRow=(t,showUndo)=>{
+    const sid=getSettlementId(t.from,t.to);
+    const canUndo=sid&&(getSettlementMarkedBy(t.from,t.to)===mn||isAdmin());
+    return`<div class="settle-row">
+      <span class="settle-from">${t.from}</span><span class="settle-arrow"> → </span><span class="settle-to">${t.to}</span>
+      <span class="settle-amt">${fmt(t.amount)}</span>
+      <span class="badge-done">✓ Done</span>
+      ${showUndo&&canUndo?`<button class="btn btn-ghost btn-sm" data-undo-settle="${sid}">↩ Undo</button>`:""}
+    </div>`;
+  };
+
+  const totalPend=myPend.length+otherPend.length;
+
+  return`
+  <div class="sc">
+    <div class="sc-title">Your Transfers <span class="sc-sub">${myPend.length} pending</span></div>
+    ${myPend.length?myPend.map(t=>renderPendRow(t,true)).join("")
+      :`<div class="empty" style="padding:12px 0"><div class="empty-icon">🎉</div><p>You have no pending transfers!</p></div>`}
+    ${myDone.length?`<div class="divider"></div>
+    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Your Completed</div>
+    ${myDone.map(t=>renderDoneRow(t,true)).join("")}`:""}
+  </div>
+
+  ${otherPend.length||otherDone.length?`
+  <div class="sc" style="border-color:var(--border);opacity:.85">
+    <div class="sc-title" style="color:var(--text2)">Other Transfers <span class="sc-sub">${otherPend.length} pending</span></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">These transfers are between other members — shown for transparency.</div>
+    ${otherPend.map(t=>renderPendRow(t,false)).join("")}
+    ${otherDone.length?`<div class="divider"></div>
+    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Completed</div>
+    ${otherDone.map(t=>renderDoneRow(t,false)).join("")}`:""}
+  </div>`:""}
+
+  <div class="sc"><div class="sc-title">Breakdown by Activity</div>${activities.map(act=>{const ex=expenses.filter(e=>e.activity===act.name);if(!ex.length)return"";return`<div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">${act.icon||"💰"} ${act.name} — ${fmt(ex.reduce((s,e)=>s+e.amount,0))}</div>${ex.map(e=>`<div style="font-size:12px;color:var(--text2);margin-left:14px;margin-bottom:2px;font-family:'DM Mono',monospace">• ${e.description}: ${fmt(e.amount)} (${e.paidBy})</div>`).join("")}</div>`;}).join("")}</div>`;
 }
 
 // ── MEMBERS ──
