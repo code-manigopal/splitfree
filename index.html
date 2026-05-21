@@ -416,9 +416,8 @@ async function renderHome(){
     bindTripCards(archGrid);
   } else { archSec.style.display="none"; }
 
-  // Use onclick (not addEventListener) so it replaces instead of stacking
-  document.getElementById("b-create-trip").onclick=showCreateModal;
-  document.getElementById("b-toggle-archived").onclick=()=>{showArchived=!showArchived;renderHome();};
+  document.getElementById("b-create-trip")?.addEventListener("click",showCreateModal);
+  document.getElementById("b-toggle-archived")?.addEventListener("click",()=>{showArchived=!showArchived;renderHome();});
 }
 
 function tripCard(t){
@@ -467,7 +466,12 @@ function bindTripCards(grid){
   }));
 }
 
-function goHome(){trip=null;members=[];expenses=[];activities=[];settlements=[];history.pushState({},"",location.pathname);renderHome();}
+function goHome(){
+  trip=null;members=[];expenses=[];activities=[];settlements=[]; // null FIRST
+  stopListener(); // then stop — any queued snapshot sees trip===null and bails
+  history.pushState({},"",location.pathname);
+  renderHome();
+}
 
 function showCreateModal(){
   const today=new Date().toISOString().split("T")[0];
@@ -554,15 +558,17 @@ async function loadSubCollections(tripId){
 function startListener(tripId){
   stopListener();
   const us=[];
-  us.push(onSnapshot(subCol(tripId,"members"),snap=>{members=snap.docs.map(d=>({id:d.id,...d.data()}));if(!isPending())renderTrip();else{showScreen("screen-pending");rAuthBar();}}));
-  us.push(onSnapshot(subCol(tripId,"expenses"),snap=>{expenses=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.date||"").localeCompare(b.date||""));if(!isPending())renderTrip();}));
-  us.push(onSnapshot(subCol(tripId,"activities"),snap=>{if(snap.docs.length)activities=snap.docs.map(d=>({id:d.id,...d.data()}));if(!isPending())renderTrip();}));
-  us.push(onSnapshot(subCol(tripId,"settlements"),snap=>{settlements=snap.docs.map(d=>({id:d.id,...d.data()}));if(!isPending())renderTrip();}));
+  const guard=()=>trip&&trip.id===tripId; // only render if still on this trip
+  us.push(onSnapshot(subCol(tripId,"members"),snap=>{if(!guard())return;members=snap.docs.map(d=>({id:d.id,...d.data()}));if(!isPending())renderTrip();else{showScreen("screen-pending");rAuthBar();}}));
+  us.push(onSnapshot(subCol(tripId,"expenses"),snap=>{if(!guard())return;expenses=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.date||"").localeCompare(b.date||""));if(!isPending())renderTrip();}));
+  us.push(onSnapshot(subCol(tripId,"activities"),snap=>{if(!guard())return;if(snap.docs.length)activities=snap.docs.map(d=>({id:d.id,...d.data()}));if(!isPending())renderTrip();}));
+  us.push(onSnapshot(subCol(tripId,"settlements"),snap=>{if(!guard())return;settlements=snap.docs.map(d=>({id:d.id,...d.data()}));if(!isPending())renderTrip();}));
   unsubTrip=()=>us.forEach(u=>u());
 }
 function stopListener(){if(unsubTrip){unsubTrip();unsubTrip=null;}}
 
 function renderTrip(){
+  if(!trip)return; // guard — user navigated away
   rAuthBar();showScreen("screen-trip");
   document.getElementById("trip-name-hd").textContent=trip.name;
   document.getElementById("trip-dates-hd").textContent=[trip.startDate,trip.endDate].filter(Boolean).join(" → ")||"No dates set";
@@ -582,7 +588,7 @@ function renderTrip(){
   bindTrip();
   // render charts after DOM
   if(tab==="finalytics")setTimeout(renderCharts,50);
-  document.getElementById("b-back")?.addEventListener("click",()=>{stopListener();goHome();});
+  document.getElementById("b-back").onclick=()=>{trip=null;members=[];expenses=[];activities=[];settlements=[];stopListener();history.pushState({},"",location.pathname);renderHome();};
   document.getElementById("b-share")?.addEventListener("click",copyLink);
   document.getElementById("b-edit-trip-hdr")?.addEventListener("click",()=>{modal="edit-trip";renderTrip();});
 }
