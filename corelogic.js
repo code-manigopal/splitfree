@@ -122,17 +122,22 @@ async function loadMyTrips(){
   s2.forEach(d=>{if(!seen.has(d.id)){seen.add(d.id);myTrips.push({id:d.id,...d.data()});}});
 }
 
-// Rendering lock — prevents concurrent renderHome calls
-let _homeRendering=false;
+// Rendering lock — only one renderHome runs at a time, queued calls are dropped
+let _homeRenderToken=0;
 async function renderHome(){
-  if(_homeRendering)return;
-  _homeRendering=true;
-  try{ await _renderHome(); } finally{ _homeRendering=false; }
+  const token=++_homeRenderToken;
+  // Small delay so rapid consecutive calls collapse into one
+  await new Promise(r=>setTimeout(r,50));
+  if(token!==_homeRenderToken)return; // a newer call superseded this one
+  await _renderHome();
 }
 
 async function _renderHome(){
   rAuthBar();showScreen("screen-home");
   document.getElementById("home-greeting").textContent=`Welcome, ${(user.displayName||user.email).split(" ")[0]}`;
+  // Clear grid immediately before async fetch — prevents stale renders showing
+  document.getElementById("trips-grid").innerHTML=`<div class="loading">Loading your trips…</div>`;
+  document.getElementById("archived-grid").innerHTML="";
   await loadMyTrips();
   const active=myTrips.filter(t=>!t.archived);
   const archived=myTrips.filter(t=>t.archived);
