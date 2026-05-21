@@ -111,15 +111,26 @@ function rAuthBar(){
 function doSignIn(){signInWithPopup(auth,provider).catch(e=>{console.error(e);toast("Sign-in error: "+e.code,"error");});}
 
 async function loadMyTrips(){
+  // Always reset before loading — prevents duplication
   myTrips=[];
+  const seen=new Set();
   const q1=query(collection(db,"trips"),where("createdBy","==",user.email));
-  const s1=await getDocs(q1);s1.forEach(d=>myTrips.push({id:d.id,...d.data()}));
+  const s1=await getDocs(q1);
+  s1.forEach(d=>{if(!seen.has(d.id)){seen.add(d.id);myTrips.push({id:d.id,...d.data()});}});
   const q2=query(collection(db,"trips"),where("memberEmails","array-contains",user.email));
-  const s2=await getDocs(q2);s2.forEach(d=>{if(!myTrips.find(t=>t.id===d.id))myTrips.push({id:d.id,...d.data()});});
+  const s2=await getDocs(q2);
+  s2.forEach(d=>{if(!seen.has(d.id)){seen.add(d.id);myTrips.push({id:d.id,...d.data()});}});
 }
 
-// ── FIX 2: renderHome — use onclick on static buttons to avoid stacking listeners ──
+// Rendering lock — prevents concurrent renderHome calls
+let _homeRendering=false;
 async function renderHome(){
+  if(_homeRendering)return;
+  _homeRendering=true;
+  try{ await _renderHome(); } finally{ _homeRendering=false; }
+}
+
+async function _renderHome(){
   rAuthBar();showScreen("screen-home");
   document.getElementById("home-greeting").textContent=`Welcome, ${(user.displayName||user.email).split(" ")[0]}`;
   await loadMyTrips();
@@ -132,8 +143,10 @@ async function renderHome(){
     // Use onclick to avoid stacking addEventListener on each renderHome call
     btn.onclick=()=>{showArchived=!showArchived;renderHome();};
   }
+  // Use onclick (not addEventListener) on persistent HTML buttons
+  // to prevent stacking multiple listeners on repeated renderHome calls
   const createBtn=document.getElementById("b-create-trip");
-  if(createBtn) createBtn.onclick=showCreateModal;
+  if(createBtn) createBtn.onclick=()=>showCreateModal();
 
   if(!active.length){
     grid.innerHTML=`<div class="empty" style="grid-column:1/-1"><div class="empty-icon">✈️</div><p>No trips yet.<br>Create your first trip!</p></div>`;
@@ -152,6 +165,8 @@ async function renderHome(){
     archSec.style.display="none";
   }
 }
+
+} // end _renderHome
 
 function tripCard(t){
   const adm=t.createdBy===user.email;
