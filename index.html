@@ -276,7 +276,7 @@ textarea{resize:vertical;min-height:64px}
 
 <script type="module">
 import { initializeApp }   from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged }
                            from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
@@ -381,7 +381,17 @@ function rAuthBar(){
     document.getElementById("b-in")?.addEventListener("click",doSignIn);
   }
 }
-function doSignIn(){signInWithPopup(auth,provider).catch(e=>{console.error(e);toast("Sign-in error: "+e.code,"error");});}
+function doSignIn(){
+  // WhatsApp and some mobile browsers block sessionStorage needed for popup
+  // Detect restricted browser and fall back to redirect
+  const ua=navigator.userAgent||"";
+  const isRestricted=/FBAN|FBAV|Instagram|WhatsApp|wv\)|\.0\.0\.0/.test(ua)||!window.sessionStorage;
+  if(isRestricted){
+    signInWithRedirect(auth,provider).catch(e=>{console.error(e);toast("Sign-in error: "+e.code,"error");});
+  } else {
+    signInWithPopup(auth,provider).catch(e=>{console.error(e);toast("Sign-in error: "+e.code,"error");});
+  }
+}
 
 async function loadMyTrips(){
   myTrips=[];
@@ -957,6 +967,9 @@ function bindTrip(){
 }
 
 window._goHome=()=>{stopListener();goHome();};
+
+// Handle redirect result first (for WhatsApp/mobile browsers)
+getRedirectResult(auth).catch(e=>console.error("Redirect error:",e));
 
 onAuthStateChanged(auth,async u=>{
   user=u;rAuthBar();
